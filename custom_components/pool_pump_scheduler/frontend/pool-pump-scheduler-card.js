@@ -5,7 +5,7 @@
  * No build step required — vanilla JS + SVG.
  */
 
-const CARD_VERSION = "1.3.1";
+const CARD_VERSION = "1.4.0";
 
 class PoolPumpSchedulerCard extends HTMLElement {
   constructor() {
@@ -126,6 +126,16 @@ class PoolPumpSchedulerCard extends HTMLElement {
 
     const isOn = binarySensor && binarySensor.state === "on";
     const attrs = binarySensor ? binarySensor.attributes : {};
+    const solarActive = !!attrs.solar_active;
+    let pillClass = "";
+    let pillText = "Idle";
+    if (isOn && solarActive) {
+      pillClass = "on solar";
+      pillText = "On — solar";
+    } else if (isOn) {
+      pillClass = "on";
+      pillText = "On — schedule";
+    }
     const totalRuntime = attrs.total_runtime_minutes
       ? (attrs.total_runtime_minutes / 60).toFixed(2) + " h"
       : "—";
@@ -183,10 +193,49 @@ class PoolPumpSchedulerCard extends HTMLElement {
           box-shadow: 0 0 0 0 rgba(67, 160, 71, 0.7);
           animation: pulse 2s infinite;
         }
+        .status.on.solar .dot {
+          background: #f59e0b;
+          animation: pulse-solar 2s infinite;
+        }
+        .status.on.solar {
+          background: rgba(245, 158, 11, 0.15);
+          color: #b45309;
+        }
         @keyframes pulse {
           0% { box-shadow: 0 0 0 0 rgba(67, 160, 71, 0.5); }
           70% { box-shadow: 0 0 0 8px rgba(67, 160, 71, 0); }
           100% { box-shadow: 0 0 0 0 rgba(67, 160, 71, 0); }
+        }
+        @keyframes pulse-solar {
+          0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55); }
+          70% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+        .header-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .refresh-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 4px;
+          color: var(--secondary-text-color);
+          display: inline-flex;
+          align-items: center;
+          border-radius: 50%;
+        }
+        .refresh-btn:hover {
+          color: var(--primary-text-color);
+          background: var(--secondary-background-color);
+        }
+        .refresh-btn.spinning svg {
+          animation: spin 0.6s linear;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
         .chart-wrap {
           position: relative;
@@ -216,10 +265,19 @@ class PoolPumpSchedulerCard extends HTMLElement {
           fill: var(--success-color, #43a047);
           opacity: 0.35;
         }
+        .block-on.solar {
+          fill: #f59e0b;
+          opacity: 0.45;
+        }
         .now-line {
           stroke: var(--accent-color, #ff9800);
           stroke-width: 2;
           stroke-dasharray: 4 3;
+        }
+        .now-line.solar {
+          stroke: #f59e0b;
+          stroke-width: 2.5;
+          stroke-dasharray: none;
         }
         .axis-text {
           fill: var(--secondary-text-color);
@@ -280,9 +338,16 @@ class PoolPumpSchedulerCard extends HTMLElement {
       <ha-card>
         <div class="header">
           <div class="title">${this._escape(title)}</div>
-          <div class="status ${isOn ? "on" : ""}">
-            <span class="dot"></span>
-            <span>${isOn ? "Running" : "Idle"}</span>
+          <div class="header-actions">
+            <button class="refresh-btn" id="refresh-btn" title="Recalculate schedule now" aria-label="Recalculate">
+              <svg width="18" height="18" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"/>
+              </svg>
+            </button>
+            <div class="status ${pillClass}">
+              <span class="dot"></span>
+              <span>${pillText}</span>
+            </div>
           </div>
         </div>
         <div class="chart-wrap" id="chart-wrap"></div>
@@ -291,6 +356,11 @@ class PoolPumpSchedulerCard extends HTMLElement {
         }) : ""}
       </ha-card>
     `;
+
+    const refreshBtn = this.shadowRoot.getElementById("refresh-btn");
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", () => this._recalculate(refreshBtn));
+    }
 
     const wrap = this.shadowRoot.getElementById("chart-wrap");
     if (prices.length === 0) {
@@ -304,7 +374,22 @@ class PoolPumpSchedulerCard extends HTMLElement {
       return;
     }
 
-    this._renderChart(wrap, prices, blocks);
+    this._renderChart(wrap, prices, blocks, solarActive);
+  }
+
+  _recalculate(btn) {
+    if (!this._hass) return;
+    if (btn) {
+      btn.classList.remove("spinning");
+      // Force reflow so the animation restarts on rapid clicks.
+      void btn.offsetWidth;
+      btn.classList.add("spinning");
+    }
+    const binId = this._config.binary_sensor;
+    const reg = this._hass.entities && this._hass.entities[binId];
+    const data =
+      reg && reg.config_entry_id ? { entry_id: reg.config_entry_id } : {};
+    this._hass.callService("pool_pump_scheduler", "recalculate", data);
   }
 
   _renderStats({ totalRuntime, blockCount, avgPrice, totalCost, nextChange, unit, currency }) {
@@ -334,7 +419,7 @@ class PoolPumpSchedulerCard extends HTMLElement {
     `;
   }
 
-  _renderChart(wrap, prices, blocks) {
+  _renderChart(wrap, prices, blocks, solarActive = false) {
     // Determine x-domain: full extent of price slots.
     const tMin = prices[0].start.getTime();
     const tMax = prices[prices.length - 1].end.getTime();
@@ -383,7 +468,10 @@ class PoolPumpSchedulerCard extends HTMLElement {
         const x1 = xScale(b.end.getTime());
         const now = Date.now();
         const isActive = b.start.getTime() <= now && now < b.end.getTime();
-        const cls = isActive ? "block block-on" : "block";
+        let cls = "block";
+        if (isActive) {
+          cls += solarActive ? " block-on solar" : " block-on";
+        }
         return `<rect class="${cls}" x="${x0}" y="${margin.top}" width="${Math.max(
           0,
           x1 - x0
@@ -465,7 +553,8 @@ class PoolPumpSchedulerCard extends HTMLElement {
     let nowLine = "";
     if (nowT >= tMin && nowT <= tMax) {
       const x = xScale(nowT);
-      nowLine = `<line class="now-line" x1="${x}" y1="${margin.top}" x2="${x}" y2="${
+      const nowCls = solarActive ? "now-line solar" : "now-line";
+      nowLine = `<line class="${nowCls}" x1="${x}" y1="${margin.top}" x2="${x}" y2="${
         margin.top + innerH
       }" />`;
     }

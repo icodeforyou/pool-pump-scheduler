@@ -57,6 +57,7 @@ You can change all of these later via Settings → Devices & Services → Pool P
 - `sensor.<name>_next_change` — timestamp of the next ON/OFF transition.
 - `sensor.<name>_scheduled_cost` — total electricity cost for the next scheduled period (SEK).
 - `sensor.<name>_scheduled_average_price` — average price across selected slots (SEK/kWh).
+- `button.<name>_recalculate_schedule` — press to recompute the schedule immediately. Equivalent to the `pool_pump_scheduler.recalculate` service.
 
 ## Visualization card
 
@@ -82,6 +83,14 @@ Config options:
 | `show_stats` | no | `true` | Whether to show the runtime/cost/avg-price stat tiles below the chart |
 
 The chart shows a 24h+ timeline with the price curve drawn on top and the scheduled ON blocks highlighted as green bands. A dashed vertical line marks the current time. Hovering (or tapping on mobile) shows exact price + time for any quarter-hour.
+
+A status pill near the title shows what's driving the pump:
+
+- **Idle** — pump is off
+- **On — schedule** (green) — current time falls in a scheduled price-based block
+- **On — solar** (yellow ☀) — solar surplus is overriding the schedule; the current block highlight and the "now" line both turn yellow to match
+
+A refresh icon in the header triggers a manual recalculation (same as the button entity / `pool_pump_scheduler.recalculate` service). It briefly spins to confirm the click was received.
 
 ### If you're in Lovelace YAML mode
 
