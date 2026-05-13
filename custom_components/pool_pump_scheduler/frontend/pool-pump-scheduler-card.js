@@ -5,7 +5,7 @@
  * No build step required — vanilla JS + SVG.
  */
 
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.2.0";
 
 class PoolPumpSchedulerCard extends HTMLElement {
   constructor() {

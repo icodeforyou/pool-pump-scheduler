@@ -11,7 +11,8 @@ Designed for the Swedish market where Nord Pool publishes day-ahead prices aroun
 - **Enforces a minimum continuous run length** (e.g. "no block shorter than 60 minutes") to protect pump relays and motors
 - Optional **price ceiling**: never run when the price exceeds a threshold (the integration will warn if the ceiling makes the schedule unsolvable)
 - Recalculates daily at a configurable time (default 14:00, after Nord Pool publishes tomorrow's prices)
-- Falls back to "remainder of today" planning if tomorrow's prices aren't yet available
+- Plans today and tomorrow as **independent schedules** — once tomorrow's prices publish, today's plan is preserved, not overwritten
+- **Resumes correctly after a Home Assistant restart**, including mid-day restarts; diagnostic timestamps survive reloads via `Store`
 - Drives a switch entity (e.g. a Shelly) directly, or just exposes a binary sensor you can use in your own automation
 - **Bundled Lovelace card** — no separate HACS install. Shows a 24h price timeline with the scheduled ON blocks highlighted, plus runtime/cost stats.
 - Manual recalculate service for testing
@@ -107,6 +108,8 @@ The scheduler uses dynamic programming to pick a set of non-overlapping blocks t
 4. Total cost is minimized
 
 This guarantees a true optimum given the constraints, not a greedy approximation. On 96 quarter-hour slots (one day) it completes in well under a second.
+
+Today and tomorrow are solved independently. Today's plan uses only the slots from "now" through end-of-day, with the daily runtime scaled pro-rata to the remaining hours; tomorrow's plan uses the full 24-hour window with the full runtime. Both are kept in memory and the "should run" sensor checks both, which makes restarts and the midnight rollover seamless.
 
 If the constraints are unsatisfiable (e.g. ceiling too low, or block length too large to fit the required runtime in available data), the integration logs a warning and leaves the schedule empty — meaning the pump won't be turned on. Loosen the ceiling or shorten the block length to recover.
 

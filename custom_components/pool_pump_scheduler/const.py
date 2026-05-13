@@ -48,6 +48,9 @@ DEFAULT_MAX_PRICE = 5.0
 # Slot length is fixed at 15 minutes (Nord Pool quarter-hourly data).
 SLOT_MINUTES = 15
 
+# Persistent storage version for the coordinator's Store.
+STORAGE_VERSION = 1
+
 # Attribute keys used by the Nord Pool sensor.
 ATTR_RAW_TODAY = "raw_today"
 ATTR_RAW_TOMORROW = "raw_tomorrow"
