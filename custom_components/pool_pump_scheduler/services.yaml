@@ -1,0 +1,15 @@
+recalculate:
+  name: Recalculate schedule
+  description: >
+    Manually trigger a recalculation of the pool pump schedule. Useful for
+    testing or after manually changing the price sensor.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: >
+        Optional config entry ID. If omitted, all configured Pool Pump
+        Scheduler entries are recalculated.
+      required: false
+      example: "abc123def456"
+      selector:
+        text:

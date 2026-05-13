@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Poolpumpsschemaläggare",
+        "description": "Konfigurera schemaläggning av din poolpump. Integrationen väljer de billigaste elpristimmarna varje dag med hänsyn till en minsta sammanhängande körlängd, så att pumpen inte slås av och på för ofta.",
+        "data": {
+          "name": "Namn",
+          "price_sensor": "Elprissensor (Nord Pool)",
+          "pump_switch": "Pumpens strömbrytare (t.ex. din Shelly)",
+          "runtime_hours": "Krävd drifttid per dygn (timmar)",
+          "min_block_minutes": "Minsta sammanhängande körlängd (minuter)",
+          "recalc_time": "Tidpunkt för daglig omberäkning (efter att morgondagens priser publicerats)",
+          "control_switch": "Styr pumpen automatiskt",
+          "use_max_price": "Hoppa över timmar över ett pristak",
+          "max_price": "Maxpris (används endast om pristak är aktiverat)"
+        }
+      }
+    },
+    "error": {
+      "runtime_must_be_positive": "Drifttiden måste vara större än noll.",
+      "min_block_too_small": "Minsta blocklängd måste vara minst 15 minuter."
+    },
+    "abort": {
+      "already_configured": "Denna pump är redan konfigurerad."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Inställningar för Poolpumpsschemaläggare",
+        "description": "Justera schemaläggningsinställningarna. Ändringar gäller omedelbart.",
+        "data": {
+          "price_sensor": "Elprissensor (Nord Pool)",
+          "pump_switch": "Pumpens strömbrytare",
+          "runtime_hours": "Krävd drifttid per dygn (timmar)",
+          "min_block_minutes": "Minsta sammanhängande körlängd (minuter)",
+          "recalc_time": "Tidpunkt för daglig omberäkning",
+          "control_switch": "Styr pumpen automatiskt",
+          "use_max_price": "Hoppa över timmar över ett pristak",
+          "max_price": "Maxpris (SEK/kWh)"
+        }
+      }
+    }
+  },
+  "services": {
+    "recalculate": {
+      "name": "Omberäkna schema",
+      "description": "Utlös en omberäkning manuellt."
+    }
+  }
+}

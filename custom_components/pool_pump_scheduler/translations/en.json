@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Pool Pump Scheduler",
+        "description": "Configure your pool pump scheduling. The integration picks the cheapest electricity hours each day while respecting a minimum continuous run length, so your pump doesn't cycle on and off too rapidly.",
+        "data": {
+          "name": "Name",
+          "price_sensor": "Electricity price sensor (Nord Pool)",
+          "pump_switch": "Pump switch (e.g. your Shelly)",
+          "runtime_hours": "Required runtime per day (hours)",
+          "min_block_minutes": "Minimum continuous run length (minutes)",
+          "recalc_time": "Daily recalculation time (after tomorrow's prices are published)",
+          "control_switch": "Automatically control the pump switch",
+          "use_max_price": "Skip hours above a price ceiling",
+          "max_price": "Maximum price (only used if ceiling is enabled)"
+        }
+      }
+    },
+    "error": {
+      "runtime_must_be_positive": "Runtime must be greater than zero.",
+      "min_block_too_small": "Minimum block length must be at least 15 minutes."
+    },
+    "abort": {
+      "already_configured": "This pump switch is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Pool Pump Scheduler options",
+        "description": "Adjust your scheduling settings. Changes take effect immediately.",
+        "data": {
+          "price_sensor": "Electricity price sensor (Nord Pool)",
+          "pump_switch": "Pump switch",
+          "runtime_hours": "Required runtime per day (hours)",
+          "min_block_minutes": "Minimum continuous run length (minutes)",
+          "recalc_time": "Daily recalculation time",
+          "control_switch": "Automatically control the pump switch",
+          "use_max_price": "Skip hours above a price ceiling",
+          "max_price": "Maximum price (SEK/kWh)"
+        }
+      }
+    }
+  },
+  "services": {
+    "recalculate": {
+      "name": "Recalculate schedule",
+      "description": "Manually trigger a recalculation."
+    }
+  }
+}
