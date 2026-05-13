@@ -194,8 +194,17 @@ class PoolPumpSchedulerOptionsFlow(config_entries.OptionsFlow):
     """Options flow for changing settings after setup."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize the options flow."""
-        self.config_entry = config_entry
+        """Initialize the options flow.
+
+        In HA 2024.11+ `self.config_entry` is auto-populated and the
+        attribute is read-only; in older versions it must be assigned
+        explicitly. Try/except keeps both paths working without dropping
+        backwards compatibility.
+        """
+        try:
+            self.config_entry = config_entry
+        except AttributeError:
+            pass
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
