@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify versions match the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+
+          manifest=$(jq -r .version custom_components/pool_pump_scheduler/manifest.json)
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match manifest version ${manifest}"
+            exit 1
+          fi
+
+          card=$(sed -nE 's/^const CARD_VERSION = "([^"]+)";.*/\1/p' \
+            custom_components/pool_pump_scheduler/frontend/pool-pump-scheduler-card.js | head -1)
+          if [ "$tag" != "$card" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match CARD_VERSION ${card}"
+            exit 1
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
