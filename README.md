@@ -10,6 +10,7 @@ Designed for the Swedish market where Nord Pool publishes day-ahead prices aroun
 - Selects the cheapest combination of slots that satisfies your minimum daily runtime
 - **Enforces a minimum continuous run length** (e.g. "no block shorter than 60 minutes") to protect pump relays and motors
 - Optional **price ceiling**: never run when the price exceeds a threshold (the integration will warn if the ceiling makes the schedule unsolvable)
+- Optional **solar surplus overlay** (v1.3.0): when your solar production exceeds house consumption by the pump's draw, the pump runs from the sun regardless of what the price schedule says. Hysteresis on both edges protects the relay.
 - Recalculates daily at a configurable time (default 14:00, after Nord Pool publishes tomorrow's prices)
 - Plans today and tomorrow as **independent schedules** — once tomorrow's prices publish, today's plan is preserved, not overwritten
 - **Resumes correctly after a Home Assistant restart**, including mid-day restarts; diagnostic timestamps survive reloads via `Store`
@@ -93,6 +94,24 @@ resources:
 ```
 
 The static file is always available at that URL regardless of mode.
+
+## Solar surplus overlay (v1.3.0)
+
+If your house has solar panels, the pump can opportunistically run on excess production rather than from the grid. The integration takes two power sensors — one for solar production, one for house consumption — and computes live surplus as `production − consumption`. When that surplus is at least the pump's draw (you configure the threshold) for `surplus_hysteresis_seconds` continuously, the pump turns on. When surplus drops below the threshold for the same window, control returns to the price-based schedule.
+
+Enable it in Settings → Devices & Services → Pool Pump Scheduler → Configure:
+
+| Setting | Description |
+|---|---|
+| Run from solar surplus when available | Master toggle |
+| Solar production sensor | Power sensor (W) for solar output |
+| House consumption sensor | Power sensor (W) for total house draw |
+| Pump power draw (W) | The pump's typical wattage — the surplus threshold |
+| Surplus hysteresis (s) | Required continuous time above/below threshold before flipping state (default 120 s) |
+
+Both sensors must report watts (`W`), not kilowatts. If either sensor goes unavailable, the overlay falls back to "no surplus" and the price schedule resumes. The `binary_sensor.<name>_should_run` entity exposes `solar_active` and `solar_overlay_enabled` attributes so you can see what's driving the pump from your dashboard.
+
+Note: solar-driven runtime does **not** reduce the price-based daily target — they're additive. On a sunny day the pump may run more than your configured `runtime_hours`, which is normal and free.
 
 ## Service
 

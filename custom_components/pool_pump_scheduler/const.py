@@ -37,6 +37,13 @@ CONF_CONTROL_SWITCH = "control_switch"
 CONF_MAX_PRICE = "max_price"
 CONF_USE_MAX_PRICE = "use_max_price"
 
+# Solar surplus (v1.3.0)
+CONF_USE_SOLAR_SURPLUS = "use_solar_surplus"
+CONF_SOLAR_PRODUCTION_SENSOR = "solar_production_sensor"
+CONF_SOLAR_CONSUMPTION_SENSOR = "solar_consumption_sensor"
+CONF_PUMP_POWER_W = "pump_power_w"
+CONF_SURPLUS_HYSTERESIS_SECONDS = "surplus_hysteresis_seconds"
+
 # Defaults
 DEFAULT_RUNTIME_HOURS = 12.0
 DEFAULT_MIN_BLOCK_MINUTES = 60
@@ -44,6 +51,9 @@ DEFAULT_RECALC_TIME = "14:00:00"
 DEFAULT_CONTROL_SWITCH = True
 DEFAULT_USE_MAX_PRICE = False
 DEFAULT_MAX_PRICE = 5.0
+DEFAULT_USE_SOLAR_SURPLUS = False
+DEFAULT_PUMP_POWER_W = 750
+DEFAULT_SURPLUS_HYSTERESIS_SECONDS = 120
 
 # Slot length is fixed at 15 minutes (Nord Pool quarter-hourly data).
 SLOT_MINUTES = 15

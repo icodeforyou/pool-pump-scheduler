@@ -1,7 +1,7 @@
 """Update coordinator for the Pool Pump Scheduler."""
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -10,6 +10,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_change,
+    async_track_time_interval,
 )
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
@@ -22,22 +23,31 @@ from .const import (
     CONF_MAX_PRICE,
     CONF_MIN_BLOCK_MINUTES,
     CONF_PRICE_SENSOR,
+    CONF_PUMP_POWER_W,
     CONF_PUMP_SWITCH,
     CONF_RECALC_TIME,
     CONF_RUNTIME_HOURS,
+    CONF_SOLAR_CONSUMPTION_SENSOR,
+    CONF_SOLAR_PRODUCTION_SENSOR,
+    CONF_SURPLUS_HYSTERESIS_SECONDS,
     CONF_USE_MAX_PRICE,
+    CONF_USE_SOLAR_SURPLUS,
     DEFAULT_CONTROL_SWITCH,
     DEFAULT_MAX_PRICE,
     DEFAULT_MIN_BLOCK_MINUTES,
+    DEFAULT_PUMP_POWER_W,
     DEFAULT_RECALC_TIME,
     DEFAULT_RUNTIME_HOURS,
+    DEFAULT_SURPLUS_HYSTERESIS_SECONDS,
     DEFAULT_USE_MAX_PRICE,
+    DEFAULT_USE_SOLAR_SURPLUS,
     DOMAIN,
     SIGNAL_SCHEDULE_UPDATED,
     SLOT_MINUTES,
     STORAGE_VERSION,
 )
 from .scheduler import PriceSlot, ScheduleResult, compute_schedule
+from .solar import SolarSurplusTracker
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,6 +74,7 @@ class PoolPumpCoordinator:
         self._store: Store = Store(
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}"
         )
+        self._solar_tracker: SolarSurplusTracker | None = None
 
     @property
     def price_sensor(self) -> str:
@@ -120,6 +131,51 @@ class PoolPumpCoordinator:
             CONF_MAX_PRICE,
             self.entry.data.get(CONF_MAX_PRICE, DEFAULT_MAX_PRICE),
         ))
+
+    @property
+    def use_solar_surplus(self) -> bool:
+        return bool(self.entry.options.get(
+            CONF_USE_SOLAR_SURPLUS,
+            self.entry.data.get(CONF_USE_SOLAR_SURPLUS, DEFAULT_USE_SOLAR_SURPLUS),
+        ))
+
+    @property
+    def solar_production_sensor(self) -> str | None:
+        val = self.entry.options.get(
+            CONF_SOLAR_PRODUCTION_SENSOR,
+            self.entry.data.get(CONF_SOLAR_PRODUCTION_SENSOR),
+        )
+        return val or None
+
+    @property
+    def solar_consumption_sensor(self) -> str | None:
+        val = self.entry.options.get(
+            CONF_SOLAR_CONSUMPTION_SENSOR,
+            self.entry.data.get(CONF_SOLAR_CONSUMPTION_SENSOR),
+        )
+        return val or None
+
+    @property
+    def pump_power_w(self) -> float:
+        return float(self.entry.options.get(
+            CONF_PUMP_POWER_W,
+            self.entry.data.get(CONF_PUMP_POWER_W, DEFAULT_PUMP_POWER_W),
+        ))
+
+    @property
+    def surplus_hysteresis_seconds(self) -> int:
+        return int(self.entry.options.get(
+            CONF_SURPLUS_HYSTERESIS_SECONDS,
+            self.entry.data.get(
+                CONF_SURPLUS_HYSTERESIS_SECONDS,
+                DEFAULT_SURPLUS_HYSTERESIS_SECONDS,
+            ),
+        ))
+
+    @property
+    def solar_active(self) -> bool:
+        """Whether the solar overlay is currently forcing the pump on."""
+        return self._solar_tracker is not None and self._solar_tracker.active
 
     @property
     def schedule(self) -> ScheduleResult | None:
@@ -198,6 +254,37 @@ class PoolPumpCoordinator:
             )
         )
 
+        # Solar surplus overlay: listen on both sensors and also poll at
+        # a low frequency so the hysteresis timer advances even when no
+        # state-change events fire.
+        if (
+            self.use_solar_surplus
+            and self.solar_production_sensor
+            and self.solar_consumption_sensor
+        ):
+            self._solar_tracker = SolarSurplusTracker(
+                pump_power_w=self.pump_power_w,
+                hysteresis_seconds=self.surplus_hysteresis_seconds,
+            )
+            self._unsubs.append(
+                async_track_state_change_event(
+                    self.hass,
+                    [
+                        self.solar_production_sensor,
+                        self.solar_consumption_sensor,
+                    ],
+                    self._handle_solar_change,
+                )
+            )
+            self._unsubs.append(
+                async_track_time_interval(
+                    self.hass,
+                    self._handle_solar_tick,
+                    timedelta(seconds=30),
+                )
+            )
+            self._update_solar_tracker(dt_util.now())
+
         # Initial computation — compute today and tomorrow so the pump
         # resumes correctly after a restart.
         await self.async_recalculate()
@@ -223,6 +310,55 @@ class PoolPumpCoordinator:
         """Triggered when the price sensor state changes."""
         # Recompute lazily; sensor often updates many times.
         self.hass.async_create_task(self.async_recalculate())
+
+    @callback
+    def _handle_solar_change(self, event) -> None:
+        """Triggered when a solar production/consumption sensor changes."""
+        self._update_solar_tracker(dt_util.now())
+
+    @callback
+    def _handle_solar_tick(self, now: datetime) -> None:
+        """Periodic tick so hysteresis advances even without sensor events."""
+        self._update_solar_tracker(now)
+
+    def _read_power(self, entity_id: str | None) -> float | None:
+        """Read a power sensor as a float, treating unavailable as None."""
+        if entity_id is None:
+            return None
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in (
+            "unknown", "unavailable", "none", "",
+        ):
+            return None
+        try:
+            return float(state.state)
+        except (ValueError, TypeError):
+            return None
+
+    def _update_solar_tracker(self, now: datetime) -> None:
+        """Feed the tracker with the latest surplus reading.
+
+        If the active state flips, fire the schedule signal and apply
+        immediately so the pump reacts within one tick.
+        """
+        if self._solar_tracker is None:
+            return
+        prod = self._read_power(self.solar_production_sensor)
+        cons = self._read_power(self.solar_consumption_sensor)
+        surplus = (
+            prod - cons if (prod is not None and cons is not None) else None
+        )
+        was_active = self._solar_tracker.active
+        is_active = self._solar_tracker.update(now, surplus)
+        if is_active != was_active:
+            _LOGGER.info(
+                "Solar surplus active=%s (surplus=%s W, threshold=%s W)",
+                is_active,
+                surplus,
+                self.pump_power_w,
+            )
+            async_dispatcher_send(self.hass, SIGNAL_SCHEDULE_UPDATED)
+            self.hass.async_create_task(self._apply_schedule())
 
     def _parse_slots(self, raw: list) -> list[PriceSlot]:
         """Parse the raw_today / raw_tomorrow attribute into PriceSlots."""
@@ -376,11 +512,13 @@ class PoolPumpCoordinator:
     def is_active_now(self) -> bool:
         """Return whether the pump should be on right now.
 
-        Checks both today's and tomorrow's schedules so the boundary at
-        midnight is handled naturally — at 23:59 today's last block may
-        still be active, and at 00:01 tomorrow's first block (with a
-        start time on the new calendar day) takes over.
+        Pump runs when EITHER the price-based schedule says so OR the
+        solar surplus overlay is active. Today's and tomorrow's
+        schedules are both checked so the midnight boundary is handled
+        naturally.
         """
+        if self.solar_active:
+            return True
         now = dt_util.now()
         if self.today_schedule is not None and self.today_schedule.is_active(now):
             return True

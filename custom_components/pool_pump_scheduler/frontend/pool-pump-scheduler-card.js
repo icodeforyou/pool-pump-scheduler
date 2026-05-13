@@ -5,7 +5,7 @@
  * No build step required — vanilla JS + SVG.
  */
 
-const CARD_VERSION = "1.2.0";
+const CARD_VERSION = "1.3.0";
 
 class PoolPumpSchedulerCard extends HTMLElement {
   constructor() {
@@ -23,6 +23,10 @@ class PoolPumpSchedulerCard extends HTMLElement {
       price_sensor: "",
       title: "Pool Pump Schedule",
     };
+  }
+
+  static getConfigElement() {
+    return document.createElement("pool-pump-scheduler-card-editor");
   }
 
   setConfig(config) {
@@ -561,6 +565,122 @@ class PoolPumpSchedulerCard extends HTMLElement {
 }
 
 customElements.define("pool-pump-scheduler-card", PoolPumpSchedulerCard);
+
+class PoolPumpSchedulerCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._hass = null;
+    this._config = null;
+    this._built = false;
+  }
+
+  setConfig(config) {
+    this._config = { ...(config || {}) };
+    if (this._built) this._syncValues();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._built && this._config) {
+      this._build();
+      this._built = true;
+    }
+    for (const picker of [this._binPicker, this._pricePicker]) {
+      if (picker) picker.hass = hass;
+    }
+  }
+
+  _build() {
+    this.shadowRoot.innerHTML = `
+      <style>
+        .form { display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
+        .row { display: flex; align-items: center; gap: 12px; }
+        .hint { font-size: 13px; color: var(--secondary-text-color);
+                background: var(--secondary-background-color);
+                padding: 10px 12px; border-radius: 8px;
+                border-left: 3px solid var(--primary-color); }
+        .hint strong { color: var(--primary-text-color); }
+        ha-textfield { width: 100%; }
+      </style>
+      <div class="form" id="form"></div>
+    `;
+    const form = this.shadowRoot.getElementById("form");
+
+    this._binPicker = document.createElement("ha-entity-picker");
+    this._binPicker.hass = this._hass;
+    this._binPicker.value = this._config.binary_sensor || "";
+    this._binPicker.label = "Should-run binary sensor (required)";
+    this._binPicker.includeDomains = ["binary_sensor"];
+    this._binPicker.addEventListener("value-changed", (ev) => {
+      this._update("binary_sensor", ev.detail.value);
+    });
+    form.appendChild(this._binPicker);
+
+    this._pricePicker = document.createElement("ha-entity-picker");
+    this._pricePicker.hass = this._hass;
+    this._pricePicker.value = this._config.price_sensor || "";
+    this._pricePicker.label = "Price sensor (Nord Pool — leave blank to auto-detect)";
+    this._pricePicker.includeDomains = ["sensor"];
+    this._pricePicker.addEventListener("value-changed", (ev) => {
+      this._update("price_sensor", ev.detail.value);
+    });
+    form.appendChild(this._pricePicker);
+
+    this._titleField = document.createElement("ha-textfield");
+    this._titleField.label = "Card title";
+    this._titleField.value = this._config.title || "";
+    this._titleField.addEventListener("input", (ev) => {
+      this._update("title", ev.target.value);
+    });
+    form.appendChild(this._titleField);
+
+    const statsRow = document.createElement("div");
+    statsRow.className = "row";
+    this._statsToggle = document.createElement("ha-switch");
+    this._statsToggle.checked = this._config.show_stats !== false;
+    this._statsToggle.addEventListener("change", (ev) => {
+      this._update("show_stats", ev.target.checked);
+    });
+    const statsLabel = document.createElement("span");
+    statsLabel.textContent = "Show runtime / cost / average-price tiles";
+    statsRow.appendChild(this._statsToggle);
+    statsRow.appendChild(statsLabel);
+    form.appendChild(statsRow);
+
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    hint.innerHTML =
+      "<strong>Solar surplus</strong> is configured in the integration, not " +
+      "the card. Open <em>Settings → Devices &amp; Services → " +
+      "Pool Pump Scheduler → Configure</em> to set your solar production " +
+      "and house consumption sensors.";
+    form.appendChild(hint);
+  }
+
+  _syncValues() {
+    if (this._binPicker) this._binPicker.value = this._config.binary_sensor || "";
+    if (this._pricePicker) this._pricePicker.value = this._config.price_sensor || "";
+    if (this._titleField) this._titleField.value = this._config.title || "";
+    if (this._statsToggle) this._statsToggle.checked = this._config.show_stats !== false;
+  }
+
+  _update(key, value) {
+    this._config = { ...this._config, [key]: value };
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: this._config },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+}
+
+customElements.define(
+  "pool-pump-scheduler-card-editor",
+  PoolPumpSchedulerCardEditor
+);
 
 window.customCards = window.customCards || [];
 window.customCards.push({

@@ -13,13 +13,19 @@
           "recalc_time": "Daily recalculation time (after tomorrow's prices are published)",
           "control_switch": "Automatically control the pump switch",
           "use_max_price": "Skip hours above a price ceiling",
-          "max_price": "Maximum price (only used if ceiling is enabled)"
+          "max_price": "Maximum price (only used if ceiling is enabled)",
+          "use_solar_surplus": "Run from solar surplus when available",
+          "solar_production_sensor": "Solar production sensor (W)",
+          "solar_consumption_sensor": "House consumption sensor (W)",
+          "pump_power_w": "Pump power draw (W) — the surplus threshold",
+          "surplus_hysteresis_seconds": "Surplus hysteresis (seconds, both edges)"
         }
       }
     },
     "error": {
       "runtime_must_be_positive": "Runtime must be greater than zero.",
-      "min_block_too_small": "Minimum block length must be at least 15 minutes."
+      "min_block_too_small": "Minimum block length must be at least 15 minutes.",
+      "solar_sensor_required": "Both solar production and consumption sensors must be set when solar surplus is enabled."
     },
     "abort": {
       "already_configured": "This pump switch is already configured."
@@ -38,7 +44,12 @@
           "recalc_time": "Daily recalculation time",
           "control_switch": "Automatically control the pump switch",
           "use_max_price": "Skip hours above a price ceiling",
-          "max_price": "Maximum price (SEK/kWh)"
+          "max_price": "Maximum price (SEK/kWh)",
+          "use_solar_surplus": "Run from solar surplus when available",
+          "solar_production_sensor": "Solar production sensor (W)",
+          "solar_consumption_sensor": "House consumption sensor (W)",
+          "pump_power_w": "Pump power draw (W) — the surplus threshold",
+          "surplus_hysteresis_seconds": "Surplus hysteresis (seconds, both edges)"
         }
       }
     }

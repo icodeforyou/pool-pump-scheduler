@@ -54,9 +54,14 @@ class PoolPumpShouldRunBinarySensor(BinarySensorEntity):
     @property
     def extra_state_attributes(self) -> dict:
         sched = self._coordinator.schedule
+        attrs: dict = {
+            "solar_overlay_enabled": self._coordinator.use_solar_surplus,
+            "solar_active": self._coordinator.solar_active,
+        }
         if sched is None:
-            return {"schedule_available": False}
-        return {
+            attrs["schedule_available"] = False
+            return attrs
+        attrs.update({
             "schedule_available": True,
             "block_count": sched.block_count,
             "total_runtime_minutes": sched.total_slots * 15,
@@ -67,7 +72,8 @@ class PoolPumpShouldRunBinarySensor(BinarySensorEntity):
                 {"start": s.isoformat(), "end": e.isoformat()}
                 for s, e in sched.blocks
             ],
-        }
+        })
+        return attrs
 
     async def async_added_to_hass(self) -> None:
         """Register dispatcher and time-based update listeners."""

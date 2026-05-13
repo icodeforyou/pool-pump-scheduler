@@ -15,16 +15,24 @@ from .const import (
     CONF_MAX_PRICE,
     CONF_MIN_BLOCK_MINUTES,
     CONF_PRICE_SENSOR,
+    CONF_PUMP_POWER_W,
     CONF_PUMP_SWITCH,
     CONF_RECALC_TIME,
     CONF_RUNTIME_HOURS,
+    CONF_SOLAR_CONSUMPTION_SENSOR,
+    CONF_SOLAR_PRODUCTION_SENSOR,
+    CONF_SURPLUS_HYSTERESIS_SECONDS,
     CONF_USE_MAX_PRICE,
+    CONF_USE_SOLAR_SURPLUS,
     DEFAULT_CONTROL_SWITCH,
     DEFAULT_MAX_PRICE,
     DEFAULT_MIN_BLOCK_MINUTES,
+    DEFAULT_PUMP_POWER_W,
     DEFAULT_RECALC_TIME,
     DEFAULT_RUNTIME_HOURS,
+    DEFAULT_SURPLUS_HYSTERESIS_SECONDS,
     DEFAULT_USE_MAX_PRICE,
+    DEFAULT_USE_SOLAR_SURPLUS,
     DOMAIN,
 )
 
@@ -92,6 +100,47 @@ def _build_schema(defaults: dict[str, Any]) -> vol.Schema:
                     unit_of_measurement="SEK/kWh",
                 )
             ),
+            vol.Required(
+                CONF_USE_SOLAR_SURPLUS,
+                default=defaults.get(
+                    CONF_USE_SOLAR_SURPLUS, DEFAULT_USE_SOLAR_SURPLUS
+                ),
+            ): bool,
+            vol.Optional(
+                CONF_SOLAR_PRODUCTION_SENSOR,
+                default=defaults.get(CONF_SOLAR_PRODUCTION_SENSOR, ""),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            vol.Optional(
+                CONF_SOLAR_CONSUMPTION_SENSOR,
+                default=defaults.get(CONF_SOLAR_CONSUMPTION_SENSOR, ""),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            vol.Required(
+                CONF_PUMP_POWER_W,
+                default=defaults.get(CONF_PUMP_POWER_W, DEFAULT_PUMP_POWER_W),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=50, max=5000, step=10,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="W",
+                )
+            ),
+            vol.Required(
+                CONF_SURPLUS_HYSTERESIS_SECONDS,
+                default=defaults.get(
+                    CONF_SURPLUS_HYSTERESIS_SECONDS,
+                    DEFAULT_SURPLUS_HYSTERESIS_SECONDS,
+                ),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=10, max=600, step=10,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="s",
+                )
+            ),
         }
     )
 
@@ -112,6 +161,11 @@ class PoolPumpSchedulerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_RUNTIME_HOURS] = "runtime_must_be_positive"
             if user_input[CONF_MIN_BLOCK_MINUTES] < 15:
                 errors[CONF_MIN_BLOCK_MINUTES] = "min_block_too_small"
+            if user_input.get(CONF_USE_SOLAR_SURPLUS):
+                if not user_input.get(CONF_SOLAR_PRODUCTION_SENSOR):
+                    errors[CONF_SOLAR_PRODUCTION_SENSOR] = "solar_sensor_required"
+                if not user_input.get(CONF_SOLAR_CONSUMPTION_SENSOR):
+                    errors[CONF_SOLAR_CONSUMPTION_SENSOR] = "solar_sensor_required"
             if not errors:
                 await self.async_set_unique_id(
                     f"{DOMAIN}_{user_input[CONF_PUMP_SWITCH]}"
