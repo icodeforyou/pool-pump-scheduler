@@ -75,6 +75,13 @@ class PoolPumpCoordinator:
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}"
         )
         self._solar_tracker: SolarSurplusTracker | None = None
+        # Running cost accumulators. cost_today is sampled per quarter-hour
+        # and reset at the first slot boundary of each local day; cost_total
+        # never resets. Solar-driven slots add 0 (only grid runtime counts).
+        self.cost_today: float = 0.0
+        self.cost_total: float = 0.0
+        self.cost_today_last_reset: datetime | None = None
+        self._current_slot_state: dict | None = None
 
     @property
     def price_sensor(self) -> str:
@@ -302,8 +309,99 @@ class PoolPumpCoordinator:
 
     @callback
     def _handle_slot_boundary(self, now: datetime) -> None:
-        """Triggered at every 15-minute boundary to apply schedule."""
+        """Triggered at every 15-minute boundary.
+
+        Two responsibilities in order:
+        1. Close out the slot that just ended — if the pump ran on the
+           grid during it, add to the daily and lifetime cost counters.
+        2. Apply the schedule for the new slot.
+        """
+        if self._current_slot_state is not None:
+            self._account_slot(self._current_slot_state)
+
+        slot_start = self._snap_to_quarter(now)
+        self._maybe_reset_today(slot_start)
+
+        self._current_slot_state = {
+            "start": slot_start,
+            "grid_driven": (
+                self._schedule_active_at(slot_start) and not self.solar_active
+            ),
+        }
+
+        async_dispatcher_send(self.hass, SIGNAL_SCHEDULE_UPDATED)
         self.hass.async_create_task(self._apply_schedule())
+
+    @staticmethod
+    def _snap_to_quarter(dt: datetime) -> datetime:
+        """Floor a datetime to the start of its 15-minute slot."""
+        return dt.replace(minute=(dt.minute // 15) * 15, second=0, microsecond=0)
+
+    def _maybe_reset_today(self, slot_start: datetime) -> None:
+        """Reset the daily counter when the slot belongs to a new local day."""
+        today = slot_start.date()
+        if (
+            self.cost_today_last_reset is None
+            or self.cost_today_last_reset.date() != today
+        ):
+            self.cost_today = 0.0
+            self.cost_today_last_reset = dt_util.now().replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+    def _schedule_active_at(self, when: datetime) -> bool:
+        if self.today_schedule is not None and self.today_schedule.is_active(when):
+            return True
+        if (
+            self.tomorrow_schedule is not None
+            and self.tomorrow_schedule.is_active(when)
+        ):
+            return True
+        return False
+
+    def _slot_price(self, slot_start: datetime) -> float | None:
+        """Look up the Nord Pool price for a given slot start time."""
+        state = self.hass.states.get(self.price_sensor)
+        if state is None:
+            return None
+        for attr in (ATTR_RAW_TODAY, ATTR_RAW_TOMORROW):
+            for entry in state.attributes.get(attr, []) or []:
+                try:
+                    start = entry["start"]
+                    if isinstance(start, str):
+                        start = dt_util.parse_datetime(start)
+                    if start == slot_start:
+                        return float(entry["value"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+        return None
+
+    def _account_slot(self, slot_state: dict) -> None:
+        """Add cost for the slot that just ended, if it was grid-driven."""
+        if not slot_state.get("grid_driven"):
+            return
+        slot_start: datetime = slot_state["start"]
+        price = self._slot_price(slot_start)
+        if price is None:
+            _LOGGER.debug(
+                "Cost accounting: no price found for slot %s", slot_start
+            )
+            return
+        # price is SEK/kWh; quarter-hour at pump_power_w (W) costs
+        #   price * (pump_power_w / 1000) * 0.25  SEK
+        cost = price * (self.pump_power_w / 1000.0) * 0.25
+        self.cost_today += cost
+        self.cost_total += cost
+        _LOGGER.debug(
+            "Slot %s: price=%.4f kw=%.3f cost+=%.4f today=%.4f total=%.4f",
+            slot_start,
+            price,
+            self.pump_power_w / 1000.0,
+            cost,
+            self.cost_today,
+            self.cost_total,
+        )
+        self.hass.async_create_task(self._async_save_store())
 
     @callback
     def _handle_price_change(self, event) -> None:
@@ -575,7 +673,7 @@ class PoolPumpCoordinator:
         return min(boundaries)
 
     async def _async_load_store(self) -> None:
-        """Restore persisted timestamps from disk."""
+        """Restore persisted timestamps and cost counters from disk."""
         try:
             data = await self._store.async_load()
         except Exception as err:  # pragma: no cover - defensive
@@ -589,9 +687,14 @@ class PoolPumpCoordinator:
             self.today_last_calculated = dt_util.parse_datetime(today_iso)
         if tomorrow_iso:
             self.tomorrow_last_calculated = dt_util.parse_datetime(tomorrow_iso)
+        self.cost_today = float(data.get("cost_today", 0.0) or 0.0)
+        self.cost_total = float(data.get("cost_total", 0.0) or 0.0)
+        reset_iso = data.get("cost_today_last_reset")
+        if reset_iso:
+            self.cost_today_last_reset = dt_util.parse_datetime(reset_iso)
 
     async def _async_save_store(self) -> None:
-        """Persist timestamps so diagnostic sensors survive a restart."""
+        """Persist timestamps and cost counters so they survive restart."""
         try:
             await self._store.async_save(
                 {
@@ -603,6 +706,13 @@ class PoolPumpCoordinator:
                     "tomorrow_last_calculated": (
                         self.tomorrow_last_calculated.isoformat()
                         if self.tomorrow_last_calculated
+                        else None
+                    ),
+                    "cost_today": self.cost_today,
+                    "cost_total": self.cost_total,
+                    "cost_today_last_reset": (
+                        self.cost_today_last_reset.isoformat()
+                        if self.cost_today_last_reset
                         else None
                     ),
                 }

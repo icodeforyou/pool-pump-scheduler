@@ -4,6 +4,7 @@ from __future__ import annotations
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
+    SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -26,6 +27,8 @@ async def async_setup_entry(
             NextChangeSensor(coordinator, entry),
             ScheduleCostSensor(coordinator, entry),
             ScheduleAveragePriceSensor(coordinator, entry),
+            CostTodaySensor(coordinator, entry),
+            CostTotalSensor(coordinator, entry),
         ]
     )
 
@@ -117,3 +120,64 @@ class ScheduleAveragePriceSensor(_BaseSensor):
         if sched is None or sched.total_slots == 0:
             return None
         return round(sched.total_cost / sched.total_slots, 4)
+
+
+def _currency(coordinator: PoolPumpCoordinator) -> str:
+    """Read the currency code from the Nord Pool sensor, fall back to SEK."""
+    state = coordinator.hass.states.get(coordinator.price_sensor)
+    if state is not None:
+        cur = state.attributes.get("currency")
+        if cur:
+            return cur
+    return "SEK"
+
+
+class CostTodaySensor(_BaseSensor):
+    """Accumulating cost of grid-driven pump runtime since today's midnight.
+
+    Solar-driven slots contribute zero. Resets at the first slot
+    boundary of each local day, with `last_reset` advanced so HA's
+    long-term statistics record per-day totals.
+    """
+
+    _attr_icon = "mdi:cash"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_cost_today"
+        self._attr_name = "Cost today"
+
+    @property
+    def native_unit_of_measurement(self):
+        return _currency(self._coordinator)
+
+    @property
+    def native_value(self):
+        return round(self._coordinator.cost_today, 4)
+
+    @property
+    def last_reset(self):
+        return self._coordinator.cost_today_last_reset
+
+
+class CostTotalSensor(_BaseSensor):
+    """Lifetime cost of grid-driven pump runtime. Never resets."""
+
+    _attr_icon = "mdi:cash-multiple"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_cost_total"
+        self._attr_name = "Lifetime cost"
+
+    @property
+    def native_unit_of_measurement(self):
+        return _currency(self._coordinator)
+
+    @property
+    def native_value(self):
+        return round(self._coordinator.cost_total, 4)

@@ -57,7 +57,11 @@ You can change all of these later via Settings → Devices & Services → Pool P
 - `sensor.<name>_next_change` — timestamp of the next ON/OFF transition.
 - `sensor.<name>_scheduled_cost` — total electricity cost for the next scheduled period (SEK).
 - `sensor.<name>_scheduled_average_price` — average price across selected slots (SEK/kWh).
+- `sensor.<name>_cost_today` — accumulating grid-paid cost for today (v1.5.0). Solar-driven slots add zero. `device_class: monetary`, `state_class: total` with a daily `last_reset`, so HA's long-term statistics record per-day totals you can graph as bars.
+- `sensor.<name>_cost_total` — lifetime grid-paid cost (v1.5.0). Never resets; persisted in `Store` so it survives restarts. `state_class: total_increasing`.
 - `button.<name>_recalculate_schedule` — press to recompute the schedule immediately. Equivalent to the `pool_pump_scheduler.recalculate` service.
+
+The new cost sensors derive from your configured pump wattage and the Nord Pool slot price: each 15-minute grid-driven slot adds `price × (pump_power_w / 1000) × 0.25` to both counters. Solar-driven slots are free.
 
 ## Visualization card
 
