@@ -65,8 +65,13 @@ class PoolPumpShouldRunBinarySensor(BinarySensorEntity):
             "schedule_available": True,
             "block_count": sched.block_count,
             "total_runtime_minutes": sched.total_slots * 15,
-            "total_cost": round(sched.total_cost, 3),
+            # Pre-v1.5 planning metric (sum of slot prices used by the DP).
+            # Not an actual SEK figure — kept for backwards compatibility.
+            "schedule_score": round(sched.total_cost, 3),
             "average_price": round(sched.total_cost / max(sched.total_slots, 1), 4),
+            # Actual accumulated grid cost, from the coordinator.
+            "cost_today": round(self._coordinator.cost_today, 4),
+            "cost_lifetime": round(self._coordinator.cost_total, 4),
             "next_change": self._coordinator.next_change(),
             "blocks": [
                 {"start": s.isoformat(), "end": e.isoformat()}

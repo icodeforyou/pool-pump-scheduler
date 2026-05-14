@@ -97,6 +97,8 @@ Config options:
 
 The chart shows a 24h+ timeline with the price curve drawn on top and the scheduled ON blocks highlighted as green bands. A dashed vertical line marks the current time. Hovering (or tapping on mobile) shows exact price + time for any quarter-hour.
 
+The card's "Cost today" tile shows the actual accumulated grid spend so far today (in your Nord Pool currency). Pre-v1.6.2 a "Total cost" tile in the same slot showed a DP-internal score in mislabeled "SEK" units; that score is still available as the `schedule_score` attribute on the binary sensor for anyone who was relying on it.
+
 A status pill near the title shows what's driving the pump:
 
 - **Idle** — pump is off

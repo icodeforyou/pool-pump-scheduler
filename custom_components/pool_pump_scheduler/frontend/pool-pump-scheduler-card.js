@@ -5,7 +5,7 @@
  * No build step required — vanilla JS + SVG.
  */
 
-const CARD_VERSION = "1.6.1";
+const CARD_VERSION = "1.6.2";
 
 class PoolPumpSchedulerCard extends HTMLElement {
   constructor() {
@@ -167,7 +167,7 @@ class PoolPumpSchedulerCard extends HTMLElement {
       : "—";
     const blockCount = attrs.block_count ?? "—";
     const avgPrice = attrs.average_price != null ? attrs.average_price.toFixed(3) : "—";
-    const totalCost = attrs.total_cost != null ? attrs.total_cost.toFixed(2) : "—";
+    const costToday = attrs.cost_today != null ? attrs.cost_today.toFixed(2) : "—";
     const nextChange = attrs.next_change
       ? new Date(attrs.next_change).toLocaleString(undefined, {
           weekday: "short",
@@ -418,7 +418,7 @@ class PoolPumpSchedulerCard extends HTMLElement {
 
     if (this._statsEl) {
       this._statsEl.innerHTML = this._renderStats({
-        totalRuntime, blockCount, avgPrice, totalCost, nextChange, unit, currency,
+        totalRuntime, blockCount, avgPrice, costToday, nextChange, unit, currency,
       });
     }
   }
@@ -438,7 +438,7 @@ class PoolPumpSchedulerCard extends HTMLElement {
     this._hass.callService("pool_pump_scheduler", "recalculate", data);
   }
 
-  _renderStats({ totalRuntime, blockCount, avgPrice, totalCost, nextChange, unit, currency }) {
+  _renderStats({ totalRuntime, blockCount, avgPrice, costToday, nextChange, unit, currency }) {
     return `
       <div class="stats">
         <div class="stat">
@@ -454,8 +454,8 @@ class PoolPumpSchedulerCard extends HTMLElement {
           <div class="stat-value">${avgPrice} <small>${this._escape(unit)}</small></div>
         </div>
         <div class="stat">
-          <div class="stat-label">Total cost</div>
-          <div class="stat-value">${totalCost} <small>${this._escape(currency)}</small></div>
+          <div class="stat-label">Cost today</div>
+          <div class="stat-value">${costToday} <small>${this._escape(currency)}</small></div>
         </div>
         <div class="stat">
           <div class="stat-label">Next change</div>
