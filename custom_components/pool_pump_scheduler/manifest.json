@@ -1,7 +1,7 @@
 {
   "domain": "pool_pump_scheduler",
   "name": "Pool Pump Scheduler",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "documentation": "https://github.com/icodeforyou/pool_pump_scheduler",
   "issue_tracker": "https://github.com/icodeforyou/pool_pump_scheduler/issues",
   "dependencies": ["frontend", "http"],

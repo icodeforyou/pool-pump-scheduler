@@ -5,7 +5,7 @@
  * No build step required — vanilla JS + SVG.
  */
 
-const CARD_VERSION = "1.5.1";
+const CARD_VERSION = "1.5.2";
 
 class PoolPumpSchedulerCard extends HTMLElement {
   constructor() {
@@ -180,7 +180,8 @@ class PoolPumpSchedulerCard extends HTMLElement {
     const unit =
       (priceSensor && priceSensor.attributes.unit_of_measurement) || `${currency}/kWh`;
 
-    this.shadowRoot.innerHTML = `
+    if (!this._rootBuilt) {
+      this.shadowRoot.innerHTML = `
       <style>
         :host {
           display: block;
@@ -188,6 +189,7 @@ class PoolPumpSchedulerCard extends HTMLElement {
         ha-card {
           padding: 16px;
           display: block;
+          contain: layout style;
         }
         .header {
           display: flex;
@@ -266,10 +268,13 @@ class PoolPumpSchedulerCard extends HTMLElement {
         .chart-wrap {
           position: relative;
           width: 100%;
+          aspect-ratio: 2.5 / 1;
+          min-height: 180px;
+          contain: strict;
         }
         svg {
           width: 100%;
-          height: auto;
+          height: 100%;
           display: block;
           font-family: var(--ha-font-family-body, sans-serif);
         }
@@ -363,32 +368,40 @@ class PoolPumpSchedulerCard extends HTMLElement {
       </style>
       <ha-card>
         <div class="header">
-          <div class="title">${this._escape(title)}</div>
+          <div class="title" id="title-el"></div>
           <div class="header-actions">
             <button class="refresh-btn" id="refresh-btn" title="Recalculate schedule now" aria-label="Recalculate">
               <svg width="18" height="18" viewBox="0 0 24 24">
                 <path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"/>
               </svg>
             </button>
-            <div class="status ${pillClass}">
+            <div class="status" id="status-el">
               <span class="dot"></span>
-              <span>${pillText}</span>
+              <span id="status-text-el"></span>
             </div>
           </div>
         </div>
         <div class="chart-wrap" id="chart-wrap"></div>
-        ${showStats ? this._renderStats({
-          totalRuntime, blockCount, avgPrice, totalCost, nextChange, unit, currency,
-        }) : ""}
+        ${showStats ? '<div id="stats-wrap"></div>' : ""}
       </ha-card>
     `;
-
-    const refreshBtn = this.shadowRoot.getElementById("refresh-btn");
-    if (refreshBtn) {
-      refreshBtn.addEventListener("click", () => this._recalculate(refreshBtn));
+      this._titleEl = this.shadowRoot.getElementById("title-el");
+      this._statusEl = this.shadowRoot.getElementById("status-el");
+      this._statusTextEl = this.shadowRoot.getElementById("status-text-el");
+      this._chartEl = this.shadowRoot.getElementById("chart-wrap");
+      this._statsEl = this.shadowRoot.getElementById("stats-wrap");
+      const refreshBtn = this.shadowRoot.getElementById("refresh-btn");
+      if (refreshBtn) {
+        refreshBtn.addEventListener("click", () => this._recalculate(refreshBtn));
+      }
+      this._rootBuilt = true;
     }
 
-    const wrap = this.shadowRoot.getElementById("chart-wrap");
+    this._titleEl.textContent = title;
+    this._statusEl.className = `status ${pillClass}`;
+    this._statusTextEl.textContent = pillText;
+
+    const wrap = this._chartEl;
     if (prices.length === 0) {
       wrap.innerHTML = `<div class="empty">
         No price data available.${
@@ -397,10 +410,17 @@ class PoolPumpSchedulerCard extends HTMLElement {
             : "<br><small>Tip: set 'price_sensor' in the card config.</small>"
         }
       </div>`;
+      if (this._statsEl) this._statsEl.innerHTML = "";
       return;
     }
 
     this._renderChart(wrap, prices, blocks, solarActive);
+
+    if (this._statsEl) {
+      this._statsEl.innerHTML = this._renderStats({
+        totalRuntime, blockCount, avgPrice, totalCost, nextChange, unit, currency,
+      });
+    }
   }
 
   _recalculate(btn) {
