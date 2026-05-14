@@ -5,7 +5,7 @@
  * No build step required — vanilla JS + SVG.
  */
 
-const CARD_VERSION = "1.5.0";
+const CARD_VERSION = "1.5.1";
 
 class PoolPumpSchedulerCard extends HTMLElement {
   constructor() {
@@ -42,6 +42,25 @@ class PoolPumpSchedulerCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    // HA dispatches hass updates many times per second. Tearing down the
+    // shadow DOM on each one made the page scroll-jump on mobile. Skip
+    // the render unless the entities we actually read have changed.
+    const sig = this._signature();
+    if (sig !== null && sig === this._lastSig) return;
+    this._lastSig = sig;
+    this._render();
+  }
+
+  _signature() {
+    if (!this._hass || !this._config) return null;
+    const bin = this._hass.states[this._config.binary_sensor];
+    const price = this._getPriceSensor();
+    return `${bin ? bin.state + "|" + bin.last_updated : "?"}` +
+      `|${price ? price.last_updated : "?"}`;
+  }
+
+  _forceRender() {
+    this._lastSig = null;
     this._render();
   }
 
@@ -50,15 +69,22 @@ class PoolPumpSchedulerCard extends HTMLElement {
   }
 
   connectedCallback() {
-    this._resizeObserver = new ResizeObserver(() => this._render());
+    // Debounce resize re-renders. On mobile the address bar showing/hiding
+    // triggers a flurry of resizes; without this we re-render multiple
+    // times per scroll gesture.
+    this._resizeObserver = new ResizeObserver(() => {
+      clearTimeout(this._resizeTimer);
+      this._resizeTimer = setTimeout(() => this._forceRender(), 200);
+    });
     this._resizeObserver.observe(this);
     // Tick every minute so the "now" indicator stays current.
-    this._tickInterval = setInterval(() => this._render(), 60_000);
+    this._tickInterval = setInterval(() => this._forceRender(), 60_000);
   }
 
   disconnectedCallback() {
     if (this._resizeObserver) this._resizeObserver.disconnect();
     if (this._tickInterval) clearInterval(this._tickInterval);
+    if (this._resizeTimer) clearTimeout(this._resizeTimer);
   }
 
   // -------------------------------------------------------------- data
