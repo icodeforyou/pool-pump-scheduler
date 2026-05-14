@@ -63,7 +63,14 @@ You can change all of these later via Settings → Devices & Services → Pool P
 
 The new cost sensors derive from your configured pump wattage and the Nord Pool slot price: each 15-minute grid-driven slot adds `price × (pump_power_w / 1000) × 0.25` to both counters. Solar-driven slots are free.
 
-**Secondary load (v1.6.0):** if you have a second device that runs alongside the pump — typically a pool heat-pump inverter — you can configure its power sensor (`Secondary load power sensor` in the options flow) and its draw will be folded into the cost. The integration samples this sensor at every slot boundary and uses `(pump_power_w + inverter_w) × slot_price × 0.25 h` for the grid-driven cost of that slot. Solar-covered slots remain free for both loads. The inverter is sampled once per slot (at slot end); if your inverter modulates heavily within a slot the reading is an approximation rather than a true integral.
+**Secondary load (v1.6.0):** if you have a second device that runs alongside the pump — typically a pool heat-pump inverter — you can configure its sensors in the options flow and its draw will be folded into the cost. Two sensors, both optional:
+
+- **Power sensor (W)** — instantaneous draw. Folded into cost via slot-end sampling: `inverter_w × 0.25 h` per slot. Approximate for loads that cycle within a slot (e.g. a heat pump that satisfies its setpoint mid-slot and shuts off).
+- **Energy sensor (kWh, preferred when available, v1.6.1)** — a `total_increasing` cumulative counter. The integration captures the value at every slot boundary and uses the *delta* between boundaries, which is mathematically exact regardless of how the load cycled in between.
+
+If both are configured the energy sensor wins. If only the power sensor is configured we sample-and-multiply. If the energy sensor ever reports a decrease (e.g. a sensor reset), that one slot falls back to power sampling. Solar-covered slots are free for both loads.
+
+The pump itself is still charged at the fixed `pump_power_w × slot_price × 0.25 h` — if your pump cycles inside a slot you can wire it through the same secondary-load mechanism, or open an issue and we'll add a dedicated `pump_energy_sensor` config.
 
 ## Visualization card
 

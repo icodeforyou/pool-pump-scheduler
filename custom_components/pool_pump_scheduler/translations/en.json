@@ -19,7 +19,8 @@
           "solar_consumption_sensor": "House consumption sensor (W)",
           "pump_power_w": "Pump power draw (W) — the surplus threshold",
           "surplus_hysteresis_seconds": "Surplus hysteresis (seconds, both edges)",
-          "inverter_power_sensor": "Secondary load power sensor (W, optional) — e.g. pool heat-pump inverter, folded into cost"
+          "inverter_power_sensor": "Secondary load power sensor (W, optional) — e.g. pool heat-pump inverter, folded into cost",
+          "inverter_energy_sensor": "Secondary load energy counter (kWh, optional, preferred) — exact cost accounting for cycling loads"
         }
       }
     },
@@ -51,7 +52,8 @@
           "solar_consumption_sensor": "House consumption sensor (W)",
           "pump_power_w": "Pump power draw (W) — the surplus threshold",
           "surplus_hysteresis_seconds": "Surplus hysteresis (seconds, both edges)",
-          "inverter_power_sensor": "Secondary load power sensor (W, optional) — e.g. pool heat-pump inverter, folded into cost"
+          "inverter_power_sensor": "Secondary load power sensor (W, optional) — e.g. pool heat-pump inverter, folded into cost",
+          "inverter_energy_sensor": "Secondary load energy counter (kWh, optional, preferred) — exact cost accounting for cycling loads"
         }
       }
     }

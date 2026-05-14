@@ -20,6 +20,7 @@ from .const import (
     ATTR_RAW_TOMORROW,
     ATTR_TOMORROW_VALID,
     CONF_CONTROL_SWITCH,
+    CONF_INVERTER_ENERGY_SENSOR,
     CONF_INVERTER_POWER_SENSOR,
     CONF_MAX_PRICE,
     CONF_MIN_BLOCK_MINUTES,
@@ -194,6 +195,19 @@ class PoolPumpCoordinator:
         )
         return val or None
 
+    @property
+    def inverter_energy_sensor(self) -> str | None:
+        """Optional cumulative-energy sensor (kWh) for the same secondary load.
+
+        Preferred over the power sensor for cost: the delta between slot
+        boundaries is exact regardless of how the inverter cycled.
+        """
+        val = self.entry.options.get(
+            CONF_INVERTER_ENERGY_SENSOR,
+            self.entry.data.get(CONF_INVERTER_ENERGY_SENSOR),
+        )
+        return val or None
+
     def _read_inverter_power_w(self) -> float:
         """Current inverter draw in watts; 0 if unset/unavailable."""
         sensor = self.inverter_power_sensor
@@ -201,6 +215,13 @@ class PoolPumpCoordinator:
             return 0.0
         val = self._read_power(sensor)
         return val if val is not None else 0.0
+
+    def _read_inverter_energy_kwh(self) -> float | None:
+        """Cumulative inverter energy in kWh; None if sensor unset/unavailable."""
+        sensor = self.inverter_energy_sensor
+        if not sensor:
+            return None
+        return self._read_power(sensor)
 
     @property
     def schedule(self) -> ScheduleResult | None:
@@ -345,6 +366,7 @@ class PoolPumpCoordinator:
             "grid_driven": (
                 self._schedule_active_at(slot_start) and not self.solar_active
             ),
+            "inverter_kwh_at_start": self._read_inverter_energy_kwh(),
         }
 
         async_dispatcher_send(self.hass, SIGNAL_SCHEDULE_UPDATED)
@@ -397,9 +419,12 @@ class PoolPumpCoordinator:
     def _account_slot(self, slot_state: dict) -> None:
         """Add cost for the slot that just ended, if it was grid-driven.
 
-        Total load = pump_power_w + inverter sensor's current reading (W),
-        sampled at slot end. Solar-covered slots return early via the
-        `grid_driven` flag and contribute zero.
+        Pump consumes a fixed `pump_power_w × 0.25 h` per slot. Inverter
+        energy is determined exactly when a cumulative-energy sensor is
+        configured (delta between this and the previous slot boundary);
+        otherwise it falls back to sampling the power sensor at slot end,
+        which is approximate for a cycling load. Solar-covered slots are
+        skipped via the `grid_driven` flag and contribute zero.
         """
         if not slot_state.get("grid_driven"):
             return
@@ -410,23 +435,52 @@ class PoolPumpCoordinator:
                 "Cost accounting: no price found for slot %s", slot_start
             )
             return
-        inverter_w = self._read_inverter_power_w()
-        load_kw = (self.pump_power_w + inverter_w) / 1000.0
-        cost = price * load_kw * 0.25
+
+        # Inverter energy for the slot.
+        inverter_kwh, mode = self._inverter_kwh_for_slot(slot_state)
+        pump_kwh = (self.pump_power_w / 1000.0) * 0.25
+        cost = price * (pump_kwh + inverter_kwh)
         self.cost_today += cost
         self.cost_total += cost
         _LOGGER.debug(
-            "Slot %s: price=%.4f pump_kw=%.3f inverter_w=%.0f "
+            "Slot %s: price=%.4f pump_kwh=%.4f inv_kwh=%.4f (%s) "
             "cost+=%.4f today=%.4f total=%.4f",
             slot_start,
             price,
-            self.pump_power_w / 1000.0,
-            inverter_w,
+            pump_kwh,
+            inverter_kwh,
+            mode,
             cost,
             self.cost_today,
             self.cost_total,
         )
         self.hass.async_create_task(self._async_save_store())
+
+    def _inverter_kwh_for_slot(self, slot_state: dict) -> tuple[float, str]:
+        """Return (kWh consumed by inverter during the slot, accounting mode).
+
+        Preference order:
+        1. Exact delta from a cumulative-energy sensor, if both endpoints
+           are valid floats and the delta is non-negative.
+        2. Power-sensor sampling at slot end × 0.25 h.
+        3. Zero (no inverter configured).
+        """
+        start_kwh = slot_state.get("inverter_kwh_at_start")
+        if start_kwh is not None:
+            end_kwh = self._read_inverter_energy_kwh()
+            if end_kwh is not None:
+                delta = end_kwh - start_kwh
+                if delta >= 0:
+                    return delta, "energy"
+                _LOGGER.debug(
+                    "Inverter energy sensor decreased (%.4f -> %.4f); "
+                    "falling back to power sampling for this slot",
+                    start_kwh,
+                    end_kwh,
+                )
+        if self.inverter_power_sensor:
+            return (self._read_inverter_power_w() / 1000.0) * 0.25, "power"
+        return 0.0, "none"
 
     @callback
     def _handle_price_change(self, event) -> None:

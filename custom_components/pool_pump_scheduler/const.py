@@ -48,6 +48,11 @@ CONF_SURPLUS_HYSTERESIS_SECONDS = "surplus_hysteresis_seconds"
 # the pump (e.g., pool heat-pump inverter). Folded into cost accounting.
 CONF_INVERTER_POWER_SENSOR = "inverter_power_sensor"
 
+# Cumulative energy counter (kWh) for the same secondary device (v1.6.1).
+# Preferred over the power sensor for cost: a delta between slot boundaries
+# is mathematically exact regardless of how the inverter cycled in between.
+CONF_INVERTER_ENERGY_SENSOR = "inverter_energy_sensor"
+
 # Defaults
 DEFAULT_RUNTIME_HOURS = 12.0
 DEFAULT_MIN_BLOCK_MINUTES = 60
