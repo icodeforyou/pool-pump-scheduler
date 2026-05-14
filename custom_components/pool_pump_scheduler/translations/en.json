@@ -18,7 +18,8 @@
           "solar_production_sensor": "Solar production sensor (W)",
           "solar_consumption_sensor": "House consumption sensor (W)",
           "pump_power_w": "Pump power draw (W) — the surplus threshold",
-          "surplus_hysteresis_seconds": "Surplus hysteresis (seconds, both edges)"
+          "surplus_hysteresis_seconds": "Surplus hysteresis (seconds, both edges)",
+          "inverter_power_sensor": "Secondary load power sensor (W, optional) — e.g. pool heat-pump inverter, folded into cost"
         }
       }
     },
@@ -49,7 +50,8 @@
           "solar_production_sensor": "Solar production sensor (W)",
           "solar_consumption_sensor": "House consumption sensor (W)",
           "pump_power_w": "Pump power draw (W) — the surplus threshold",
-          "surplus_hysteresis_seconds": "Surplus hysteresis (seconds, both edges)"
+          "surplus_hysteresis_seconds": "Surplus hysteresis (seconds, both edges)",
+          "inverter_power_sensor": "Secondary load power sensor (W, optional) — e.g. pool heat-pump inverter, folded into cost"
         }
       }
     }

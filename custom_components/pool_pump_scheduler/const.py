@@ -44,6 +44,10 @@ CONF_SOLAR_CONSUMPTION_SENSOR = "solar_consumption_sensor"
 CONF_PUMP_POWER_W = "pump_power_w"
 CONF_SURPLUS_HYSTERESIS_SECONDS = "surplus_hysteresis_seconds"
 
+# Secondary load (v1.6.0): a watts sensor for a device that runs alongside
+# the pump (e.g., pool heat-pump inverter). Folded into cost accounting.
+CONF_INVERTER_POWER_SENSOR = "inverter_power_sensor"
+
 # Defaults
 DEFAULT_RUNTIME_HOURS = 12.0
 DEFAULT_MIN_BLOCK_MINUTES = 60

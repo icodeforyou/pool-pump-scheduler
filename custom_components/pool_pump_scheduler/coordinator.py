@@ -20,6 +20,7 @@ from .const import (
     ATTR_RAW_TOMORROW,
     ATTR_TOMORROW_VALID,
     CONF_CONTROL_SWITCH,
+    CONF_INVERTER_POWER_SENSOR,
     CONF_MAX_PRICE,
     CONF_MIN_BLOCK_MINUTES,
     CONF_PRICE_SENSOR,
@@ -183,6 +184,23 @@ class PoolPumpCoordinator:
     def solar_active(self) -> bool:
         """Whether the solar overlay is currently forcing the pump on."""
         return self._solar_tracker is not None and self._solar_tracker.active
+
+    @property
+    def inverter_power_sensor(self) -> str | None:
+        """Optional secondary-load watts sensor (e.g. pool heat-pump inverter)."""
+        val = self.entry.options.get(
+            CONF_INVERTER_POWER_SENSOR,
+            self.entry.data.get(CONF_INVERTER_POWER_SENSOR),
+        )
+        return val or None
+
+    def _read_inverter_power_w(self) -> float:
+        """Current inverter draw in watts; 0 if unset/unavailable."""
+        sensor = self.inverter_power_sensor
+        if not sensor:
+            return 0.0
+        val = self._read_power(sensor)
+        return val if val is not None else 0.0
 
     @property
     def schedule(self) -> ScheduleResult | None:
@@ -377,7 +395,12 @@ class PoolPumpCoordinator:
         return None
 
     def _account_slot(self, slot_state: dict) -> None:
-        """Add cost for the slot that just ended, if it was grid-driven."""
+        """Add cost for the slot that just ended, if it was grid-driven.
+
+        Total load = pump_power_w + inverter sensor's current reading (W),
+        sampled at slot end. Solar-covered slots return early via the
+        `grid_driven` flag and contribute zero.
+        """
         if not slot_state.get("grid_driven"):
             return
         slot_start: datetime = slot_state["start"]
@@ -387,16 +410,18 @@ class PoolPumpCoordinator:
                 "Cost accounting: no price found for slot %s", slot_start
             )
             return
-        # price is SEK/kWh; quarter-hour at pump_power_w (W) costs
-        #   price * (pump_power_w / 1000) * 0.25  SEK
-        cost = price * (self.pump_power_w / 1000.0) * 0.25
+        inverter_w = self._read_inverter_power_w()
+        load_kw = (self.pump_power_w + inverter_w) / 1000.0
+        cost = price * load_kw * 0.25
         self.cost_today += cost
         self.cost_total += cost
         _LOGGER.debug(
-            "Slot %s: price=%.4f kw=%.3f cost+=%.4f today=%.4f total=%.4f",
+            "Slot %s: price=%.4f pump_kw=%.3f inverter_w=%.0f "
+            "cost+=%.4f today=%.4f total=%.4f",
             slot_start,
             price,
             self.pump_power_w / 1000.0,
+            inverter_w,
             cost,
             self.cost_today,
             self.cost_total,

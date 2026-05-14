@@ -63,6 +63,8 @@ You can change all of these later via Settings → Devices & Services → Pool P
 
 The new cost sensors derive from your configured pump wattage and the Nord Pool slot price: each 15-minute grid-driven slot adds `price × (pump_power_w / 1000) × 0.25` to both counters. Solar-driven slots are free.
 
+**Secondary load (v1.6.0):** if you have a second device that runs alongside the pump — typically a pool heat-pump inverter — you can configure its power sensor (`Secondary load power sensor` in the options flow) and its draw will be folded into the cost. The integration samples this sensor at every slot boundary and uses `(pump_power_w + inverter_w) × slot_price × 0.25 h` for the grid-driven cost of that slot. Solar-covered slots remain free for both loads. The inverter is sampled once per slot (at slot end); if your inverter modulates heavily within a slot the reading is an approximation rather than a true integral.
+
 ## Visualization card
 
 The integration ships with a custom Lovelace card that's automatically registered when you install it — **no separate HACS install or resource setup needed** (when Lovelace is in storage mode, which is the default).

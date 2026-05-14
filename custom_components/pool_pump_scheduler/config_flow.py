@@ -12,6 +12,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_CONTROL_SWITCH,
+    CONF_INVERTER_POWER_SENSOR,
     CONF_MAX_PRICE,
     CONF_MIN_BLOCK_MINUTES,
     CONF_PRICE_SENSOR,
@@ -140,6 +141,12 @@ def _build_schema(defaults: dict[str, Any]) -> vol.Schema:
                     mode=selector.NumberSelectorMode.BOX,
                     unit_of_measurement="s",
                 )
+            ),
+            vol.Optional(
+                CONF_INVERTER_POWER_SENSOR,
+                default=defaults.get(CONF_INVERTER_POWER_SENSOR, ""),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
             ),
         }
     )
