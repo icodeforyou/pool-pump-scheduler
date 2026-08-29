@@ -1,6 +1,8 @@
 """Binary sensor for Pool Pump Scheduler."""
 from __future__ import annotations
 
+from datetime import datetime
+
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -9,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_change
 
 from .const import DOMAIN, SIGNAL_SCHEDULE_UPDATED
 from .coordinator import PoolPumpCoordinator
@@ -89,11 +92,10 @@ class PoolPumpShouldRunBinarySensor(BinarySensorEntity):
         )
 
         # Also tick at slot boundaries so is_on stays current.
-        from homeassistant.helpers.event import async_track_time_change
         self.async_on_remove(
             async_track_time_change(
                 self.hass,
-                lambda now: self.async_write_ha_state(),
+                self._handle_slot_boundary,
                 minute=[0, 15, 30, 45],
                 second=6,
             )
@@ -101,4 +103,14 @@ class PoolPumpShouldRunBinarySensor(BinarySensorEntity):
 
     @callback
     def _handle_update(self) -> None:
+        self.async_write_ha_state()
+
+    @callback
+    def _handle_slot_boundary(self, now: datetime) -> None:
+        """Refresh the state at each slot boundary.
+
+        This must be a @callback: Home Assistant inspects the listener and
+        dispatches an undecorated sync function to the executor, and
+        async_write_ha_state() may only be called from the event loop.
+        """
         self.async_write_ha_state()
